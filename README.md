@@ -1,1 +1,1 @@
-# Data_challenge
+# Land cover predictive modeling from satellite images
