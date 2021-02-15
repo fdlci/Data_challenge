@@ -138,5 +138,6 @@ dmypy.json
 cython_debug/
 
 .idea/
-Pytorch/dataset
-Pytorch/.ipynb_checkpoints
+dataset/
+.ipynb_checkpoints/
+.models/
