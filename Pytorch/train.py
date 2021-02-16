@@ -123,7 +123,7 @@ def training(model, train_loader, valid_loader, data_sizes, epochs, optimizer, s
 
             for image, mask in tqdm(loaders[phase]):
                 image = image.to(device)
-                mask = mask.type(torch.long).to(device)
+                mask = mask.to(device)
 
                 optimizer.zero_grad()
 
@@ -132,8 +132,8 @@ def training(model, train_loader, valid_loader, data_sizes, epochs, optimizer, s
                     output = model(image)
                     # print(output)
                     _, preds = torch.max(output, 1)
-                    sourceTensor = mask.clone().detach()
-                    loss = criterion(output, sourceTensor.squeeze())
+
+                    loss = criterion(output, torch.tensor(mask, dtype=torch.long, device=device).squeeze())
                     # loss = criterion(output, mask)
 
                     if phase == "train":
@@ -177,7 +177,7 @@ def training(model, train_loader, valid_loader, data_sizes, epochs, optimizer, s
     plt.plot(validation_loss, 'r', label='Validation Loss')
     plt.title(title)
     plt.legend()
-    plt.show()
+    plt.show() #Change title for every model
 
     return model
 
@@ -205,7 +205,7 @@ def train_model(train_dir, model, epochs, batch_size, lr):
 
 if __name__ == '__main__':
 
-    train_dir = 'Pytorch/Small_dataset/train'
+    train_dir = 'Pytorch/dataset/train'
     model = UNet()
     epochs = 10
     batch_size = 16
