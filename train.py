@@ -32,7 +32,7 @@ import torchvision.transforms.functional as TF
 from LCD import LandCoverData as LCD
 from dataset import ImageSegementationDataset as dataset
 from dataset import train_val_dataset
-from Unet import UNet
+from unet import UNet
 
 def class_weight():
     weights = np.zeros((LCD.N_CLASSES,))
