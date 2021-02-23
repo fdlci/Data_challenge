@@ -107,18 +107,3 @@ def train_val_dataset(train_dir, val_split=0.25):
     number_files = len(list_images)
     train_idx, val_idx = train_test_split(range(number_files), test_size=val_split)
     return itemgetter(*train_idx)(list_images), itemgetter(*val_idx)(list_images)
-
-
-if __name__ == '__main__':
-
-    train_dir = 'dataset/train'
-    test_dir = 'dataset/test'
-
-    train_idx, val_idx = train_val_dataset(train_dir, val_split=0.2)
-    train_set = ImageSegementationDataset(train_dir, path_index=train_idx, mode='train')
-    val_set = ImageSegementationDataset(train_dir, path_index=val_idx, mode='valid')
-    test_set = ImageSegementationDataset(test_dir, mode='test')
-
-    print("Train set contains", len(train_set), "elements")
-    print("Validation set contains", len(val_set), "elements")
-    print("Test set contains", len(test_set), "elements")

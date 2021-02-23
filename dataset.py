@@ -2,6 +2,7 @@
 import random
 import os
 from tifffile import TiffFile
+from operator import itemgetter
 # Data
 import numpy as np
 # Sklearn
@@ -17,13 +18,16 @@ class ImageSegementationDataset(Dataset):
     in_channels = 4
     out_channels = 10
 
-    def __init__(self, images_dir, mode="train", random_state=42):
+    def __init__(self, images_dir, path_index=None, mode="train", random_state=42):
 
-        assert mode in ["train", "test"], "mode should either be 'train' or 'test'"
+        assert mode in ["train", "valid", "test"], "mode should either be 'train' or 'test'"
 
         self.mode = mode
         self.images_dir = images_dir
-        self.path_indices = os.listdir(os.path.join(self.images_dir, 'images'))
+        if self.mode == 'test':
+            self.path_indices = os.listdir(os.path.join(self.images_dir, 'images'))
+        else:
+            self.path_indices = path_index
         self.random_state = random_state
 
     def transform(self, image, mask=None):
@@ -31,7 +35,7 @@ class ImageSegementationDataset(Dataset):
         if self.random_state:
             random.seed(self.random_state)
 
-        if isinstance(mask, np.ndarray):
+        if self.mode == 'train':
             if random.random() > 0.5:
                 image = np.fliplr(image)
                 mask = np.fliplr(mask)
@@ -52,6 +56,13 @@ class ImageSegementationDataset(Dataset):
             image = torch.from_numpy(image.transpose(2, 0, 1).copy())
             mask = torch.from_numpy(mask.transpose(2, 0, 1).copy())
             return image, mask
+
+        elif self.mode == 'valid':
+            image = np.float32(image) / LCD.TRAIN_PIXELS_MAX
+            image = torch.from_numpy(image.transpose(2, 0, 1).copy())
+            mask = torch.from_numpy(mask.transpose(2, 0, 1).copy())
+            return image, mask
+
         else:
             image = np.float32(image) / LCD.TRAIN_PIXELS_MAX
             image = torch.from_numpy(image.transpose(2, 0, 1).copy())
@@ -59,11 +70,11 @@ class ImageSegementationDataset(Dataset):
 
     @staticmethod
     def parse_tiff(path):
-        """Loads a Tiff image 
+        """Loads a Tiff image
         Args:
             image_path (bytes): path to image
         Returns:
-            numpy.array[uint16]: the image 
+            numpy.array[uint16]: the image
         """
         with TiffFile(path) as tifi:
             image = tifi.asarray()
@@ -73,7 +84,8 @@ class ImageSegementationDataset(Dataset):
         return len(self.path_indices)
 
     def __getitem__(self, idx):
-        if self.mode == 'train':
+
+        if self.mode == 'train' or self.mode == 'valid':
             image_path = os.path.join(self.images_dir, 'images', self.path_indices[idx])
             mask_path = os.path.join(self.images_dir, 'masks', self.path_indices[idx])
             image = ImageSegementationDataset.parse_tiff(image_path)
@@ -86,9 +98,11 @@ class ImageSegementationDataset(Dataset):
             image_path = os.path.join(self.images_dir, 'images', self.path_indices[idx])
             image = ImageSegementationDataset.parse_tiff(image_path)
             image = self.transform(image)
-            return image
+            return image, self.path_indices[idx]
 
 
-def train_val_dataset(dataset, val_split=0.25):
-    train_idx, val_idx = train_test_split(list(range(len(dataset))), test_size=val_split)
-    return Subset(dataset, train_idx), Subset(dataset, val_idx)
+def train_val_dataset(train_dir, val_split=0.25):
+    list_images = os.listdir(os.path.join(train_dir, 'images'))
+    number_files = len(list_images)
+    train_idx, val_idx = train_test_split(range(number_files), test_size=val_split)
+    return itemgetter(*train_idx)(list_images), itemgetter(*val_idx)(list_images)

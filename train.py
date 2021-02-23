@@ -202,14 +202,3 @@ def train_model(train_dir, model, epochs, batch_size, lr):
     model_ft = training(model, loader_train, loader_valid, data_sizes, epochs, optimizer_ft, exp_lr_scheduler, title)
 
     return model_ft
-
-if __name__ == '__main__':
-
-    train_dir = 'Pytorch/dataset/train'
-    model = UNet()
-    epochs = 10
-    batch_size = 16
-    lr = 1e-5
-
-    trained_model = train_model(train_dir, model, epochs, batch_size, lr)
-    torch.save(trained_model.state_dict(),"unet.pt")
