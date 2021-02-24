@@ -103,7 +103,7 @@ if __name__ == '__main__':
     A.Flip(p=0.5),
     A.RandomBrightnessContrast(p=0.2),
     A.ChannelShuffle(p=0.2),
-    A.HueSaturationValue(p=0.2)
+    #A.HueSaturationValue(p=0.2)
 ])
 
     train_dir = 'dataset/train'
