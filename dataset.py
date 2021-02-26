@@ -5,6 +5,7 @@ from tifffile import TiffFile
 from operator import itemgetter
 # Data
 import numpy as np
+import cv2
 # Sklearn
 from sklearn.model_selection import train_test_split
 # Torch
@@ -14,24 +15,35 @@ from torch.utils.data import Dataset, Subset
 from LCD import LandCoverData as LCD
 
 
-class ImageSegementationDataset(Dataset):
-    in_channels = 4
-    out_channels = 10
+def parse_tiff(path):
+    """Loads a Tiff image
+    Args:
+        image_path (bytes): path to image
+    Returns:
+        numpy.array[uint16]: the image
+    """
+    with TiffFile(path) as tifi:
+        image = tifi.asarray()
+    return image
 
-    def __init__(self, images_dir, path_index=None, mode="train", random_state=42):
+
+class ImageSegementationDataset(Dataset):
+
+    def __init__(self, images_dir, in_channels=4, path_index=None, mode="train", random_state=42, transforms=None):
 
         assert mode in ["train", "valid", "test"], "mode should either be 'train' or 'test'"
 
         self.mode = mode
+        self.in_channels = in_channels
         self.images_dir = images_dir
         if self.mode == 'test':
             self.path_indices = os.listdir(os.path.join(self.images_dir, 'images'))
         else:
             self.path_indices = path_index
         self.random_state = random_state
+        self.transforms = transforms
 
     def transform(self, image, mask=None):
-
         if self.random_state:
             random.seed(self.random_state)
 
@@ -68,36 +80,27 @@ class ImageSegementationDataset(Dataset):
             image = torch.from_numpy(image.transpose(2, 0, 1).copy())
             return image
 
-    @staticmethod
-    def parse_tiff(path):
-        """Loads a Tiff image
-        Args:
-            image_path (bytes): path to image
-        Returns:
-            numpy.array[uint16]: the image
-        """
-        with TiffFile(path) as tifi:
-            image = tifi.asarray()
-        return image
-
     def __len__(self):
         return len(self.path_indices)
 
     def __getitem__(self, idx):
 
-        if self.mode == 'train' or self.mode == 'valid':
+        if self.mode in ['train', 'valid']:
             image_path = os.path.join(self.images_dir, 'images', self.path_indices[idx])
             mask_path = os.path.join(self.images_dir, 'masks', self.path_indices[idx])
-            image = ImageSegementationDataset.parse_tiff(image_path)
-            mask = ImageSegementationDataset.parse_tiff(mask_path)
-            # add channel dimension to mask: (256, 256, 1)
-            mask = np.expand_dims(mask, axis=-1)
-            image, mask = self.transform(image, mask)
+            image = cv2.normalize(parse_tiff(image_path)[..., :self.in_channels],dst=None, alpha=0, beta=65535, norm_type=cv2.NORM_MINMAX)
+            mask = parse_tiff(mask_path)
+            if self.transforms:
+                transformed = self.transforms(image=image, mask=mask)
+                image = transformed['image']
+                mask = transformed['mask'].unsqueeze(0)
             return image, mask
         else:
             image_path = os.path.join(self.images_dir, 'images', self.path_indices[idx])
-            image = ImageSegementationDataset.parse_tiff(image_path)
-            image = self.transform(image)
+            image = cv2.normalize(parse_tiff(image_path)[..., :self.in_channels],dst=None, alpha=0, beta=65535, norm_type=cv2.NORM_MINMAX)
+            if self.transforms:
+                transformed = self.transforms(image=image)
+                image = transformed['image']
             return image, self.path_indices[idx]
 
 
