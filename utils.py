@@ -28,6 +28,10 @@ def show_mask(mask, classes_colorpalette=None, classes=LCD.CLASSES, add_legend=T
         ax.legend(handles=handles)
     return im
 
+def batch_distribution(y):
+    class_distribution = np.apply_along_axis(np.bincount, axis=1, arr=y.flatten(1), minlength=LCD.N_CLASSES)
+    # Normalize to sum to 1
+    return (class_distribution.T/class_distribution.sum(1)).T
 
 def class_weight():
     weights = np.zeros((LCD.N_CLASSES,))

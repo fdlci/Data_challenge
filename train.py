@@ -1,126 +1,99 @@
 # Essentials
-import time
 import copy
-from collections import OrderedDict
-import random
-import os
-from tifffile import TiffFile
-from PIL import Image, ImageOps
-from pathlib import Path
-from torch._C import dtype
-from tqdm.notebook import tqdm
-# Sklearn
-from sklearn.model_selection import train_test_split
-# Data
-import numpy as np
 import pandas as pd
-# Plot
-import matplotlib.pyplot as plt
-# Torch
-import torch
-import torch.nn as nn
-from torch.utils.data import Dataset, Subset
-import torch.optim as optim
-from torch.optim import lr_scheduler
-from torch.utils.data import DataLoader
-from torch.autograd import Variable
-import torch.nn.functional as F
-# Torchvision
-from torchvision import datasets, transforms
-import torchvision.transforms.functional as TF
+from tqdm.notebook import tqdm
 # Local
-from LCD import LandCoverData as LCD
 from metrics import *
-from losses import *
+from utils import *
 
 
-def training(model, train_loader, valid_loader, data_sizes, epochs, optimizer, criterion, scheduler, title, device):
-    print("Device", device)
-    model.to(device)
+class Trainer:
+    def __init__(self, model, loaders, optimizer, criterion, scheduler=None, device=None):
+        self.logger = {}
+        self.model = model
+        self.loaders = loaders
+        self.optimizer = optimizer
+        self.criterion = criterion
+        self.scheduler = scheduler
+        self.device = device
 
-    training_loss = []
-    validation_loss = []
+        self.best_model_params = copy.deepcopy(model.state_dict())
+        self.best_kl = 1000
 
-    best_model = copy.deepcopy(model.state_dict())
-    best_kl = 1000
+    def reset(self):
+        self.model.to(self.device)
+        for key in ['loss', 'kl_div', 'iou']:
+            self.logger[key] = {}
+            for mode in ['train', 'val']:
+                self.logger[key][mode] = []
 
-    loaders = {"train": train_loader, "valid": valid_loader}
-    since = time.time()
-    for epoch in range(1, epochs + 1):
-        print(f'Epoch {epoch}/{epochs}')
-        print('-' * 10)
+    def execute(self, mode='train'):
+        assert mode in ['train', 'val'], "mode should belong to ['train', 'val']"
 
-        for phase in ["train", "valid"]:
-            if phase == "train":
-                model.train()
-            else:
-                model.eval()
+        running_loss = 0
+        running_iou = 0
+        running_kl_div = 0
 
-            running_loss = 0.0
-            running_iou = 0
-            running_kl_div = 0
+        if mode == 'train':
+            self.model.train()
+        else:
+            self.model.eval()
 
-            for image, mask in tqdm(loaders[phase]):
-                image, mask = image.to(device), mask.to(device)
-                with torch.set_grad_enabled(phase == 'train'):
+        for image, mask in tqdm(self.loaders[mode]):
+            image, mask = image.to(self.device), mask.to(self.device)
+            output = self.model(image)
+            _, preds = torch.max(output, 1)
 
-                    output = model(image)
-                    _, preds = torch.max(output, 1)
+            loss = self.criterion(output, mask)
 
-                    loss = criterion(output, mask)
-
-                    if phase == "train":
-                        optimizer.zero_grad()
-                        loss.backward()
-                        optimizer.step()
-
+            if mode == 'train':
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+            with torch.no_grad():
                 running_loss += loss.item()
                 running_iou += mIOU(mask, preds)
                 running_kl_div += epsilon_kl_divergence(mask.cpu(), preds.cpu())
 
-            epoch_loss = running_loss / data_sizes[phase]
-            epoch_iou = running_iou / data_sizes[phase]
-            epoch_kl = running_kl_div / data_sizes[phase]
-            if phase == 'train':
-                scheduler.step()
-                training_loss.append(epoch_loss)
-            else:
-                validation_loss.append(epoch_loss)
+        self.logger['loss'][mode].append(running_loss / len(self.loaders[mode]))
+        self.logger['iou'][mode].append(running_iou / len(self.loaders[mode]))
+        self.logger['kl_div'][mode].append(running_kl_div / len(self.loaders[mode]))
+        if mode == 'val' and running_kl_div / len(self.loaders[mode]) < self.best_kl:
+            self.best_kl = running_kl_div / len(self.loaders[mode])
+            self.best_model_params = copy.deepcopy(self.model.state_dict())
 
-            print('{} Loss: {:.4f} IoU: {:.4f} KL_div: {:.4f}'.format(phase, epoch_loss, epoch_iou, epoch_kl))
+    def run(self, epochs, verbose=True):
+        '''
+        Runs training for specified nnumber of epochs.
+        params:
+        epochs (int): Number of epochs
+        '''
+        for e in range(epochs):
+            self.execute('train')
+            self.execute('val')
+            if self.scheduler:
+                self.scheduler.step()
+            if verbose:
+                print("Epoch #", e, "Training Loss:", self.logger['loss']['train'][e], "Training IoU:",
+                      self.logger['iou']['train'][e], "Training KL:", self.logger['kl_div']['train'][e])
+                print("Epoch #", e, "Validation Loss:", self.logger['loss']['val'][e], "Validation IoU:",
+                      self.logger['iou']['val'][e], "Validation KL:", self.logger['kl_div']['val'][e])
 
-            if phase == 'valid' and epoch_kl < best_kl:
-                best_kl = epoch_kl
-                best_model = copy.deepcopy(model.state_dict())
-                torch.save(model.state_dict(), "unet_timm-efficientnet-b3_3_channels.pt")
+    def get_best_model(self):
+        return self.best_model_params
 
-    # Plotting the validation loss and training loss
-    print('validation loss: ' + str(validation_loss))
-    time_elapsed = time.time() - since
-    print('Training complete in {:.0f}m {:.0f}s'.format(
-        time_elapsed // 60, time_elapsed % 60))
-
-    # load best model weights
-    model.load_state_dict(best_model)
-
-    # plot the training and validation loss
-    plt.figure()
-    plt.plot(training_loss, 'b', label='Training Loss')
-    plt.plot(validation_loss, 'r', label='Validation Loss')
-    plt.title(title)
-    plt.legend()
-    plt.show()  # Change title for every model
-
-    return model
-
-
-def train_model(loader_train, loader_valid, data_sizes, model, epochs, lr, device):
-    optimizer_ft = optim.SGD(model.parameters(), lr=lr, momentum=0.9)
-    criterion = nn.BCELoss()
-    exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
-    # Training the model
-    title = 'Variations of the training and validation loss SGD'
-    model_ft = training(model, loader_train, loader_valid, data_sizes, epochs, optimizer_ft, criterion,
-                        exp_lr_scheduler, title, device)
-
-    return model_ft
+    def generate_submission(self, loader, fname='submission'):
+        sub_dict = {"sample_id": [], "no_data": [], "clouds": [], "artificial": [], "cultivated": [], "broadleaf": [],
+                    "coniferous": [], "herbaceous": [], "natural": [], "snow": [], "water": []}
+        for image, path in tqdm(loader):
+            image = image.to(self.device)
+            with torch.no_grad():
+                output = self.model(image)
+                _, preds = torch.max(output, 1)
+                class_dis = batch_distribution(preds.cpu())
+                sub_dict["sample_id"] += [int(p.split('.')[0]) for p in path]
+                for key in LCD.CLASSES:
+                    sub_dict[key] += class_dis[:, LCD.CLASSES.index(key)].tolist()
+        df_sub = pd.DataFrame.from_dict(sub_dict)
+        df_sub = df_sub.sort_values(by='sample_id')
+        df_sub.to_csv(f'{fname}.csv')

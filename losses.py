@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch import nn
 
 
-def change_shape(y_true, y_pred, numLabels):
+def one_hot(y_true, y_pred, numLabels):
     encoded_target = y_pred.data.clone().zero_()
     encoded_target[...] = 0
     encoded_target.scatter_(1, torch.tensor(y_true.unsqueeze(1), dtype=torch.int64), 1.)
@@ -39,7 +39,10 @@ class BCELoss2d(nn.Module):
         self.bce_loss = nn.BCEWithLogitsLoss()
 
     def forward(self, logits, labels):
+        num_labels = logits.shape[1]
         logits_flat = logits.view(-1)
+        if labels.size(1) != num_labels:
+            labels = one_hot(labels, logits, num_labels)
         labels_flat = labels.view(-1)
         return self.bce_loss(logits_flat, labels_flat)
 
@@ -52,7 +55,7 @@ class SoftDiceLoss(nn.Module):
     def forward(self, logits, labels):
         probs = F.softmax(logits, dim=1)
         if labels.size(1) != self.num_labels:
-            labels = change_shape(labels, logits, self.num_labels)
+            labels = one_hot(labels, logits, self.num_labels)
         num = labels.size(0)
         score = 0
         for class_ in range(self.num_labels):
@@ -64,19 +67,13 @@ class SoftDiceLoss(nn.Module):
 
 
 class CombinedLoss(nn.Module):
-    def __init__(self, is_log_dice=False):
+    def __init__(self, is_log_dice=False, num_labels=10):
         super(CombinedLoss, self).__init__()
         self.is_log_dice = is_log_dice
-
         self.bce = BCELoss2d()
-        self.soft_dice = SoftDiceLoss()
+        self.soft_dice = SoftDiceLoss(num_labels)
 
     def forward(self, logits, labels):
-        size = logits.size()
-        assert size[1] == 1, size
-        logits = logits.view(size[0], size[2], size[3])
-        labels = labels.view(size[0], size[2], size[3])
-
         bce_loss = self.bce(logits, labels)
         dice_loss = self.soft_dice(logits, labels)
 
