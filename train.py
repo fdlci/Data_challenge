@@ -44,7 +44,7 @@ class Trainer:
             output = self.model(image)
             _, preds = torch.max(output, 1)
 
-            loss = self.criterion(output, mask)
+            loss, bce_loss, dice_loss = self.criterion(output, mask.squeeze())
 
             if mode == 'train':
                 self.optimizer.zero_grad()
@@ -74,13 +74,26 @@ class Trainer:
             if self.scheduler:
                 self.scheduler.step()
             if verbose:
-                print("Epoch #", e, "Training Loss:", self.logger['loss']['train'][e], "Training IoU:",
+                print(f"Epoch {e+1}/{epochs} Training Loss:", self.logger['loss']['train'][e], "Training IoU:",
                       self.logger['iou']['train'][e], "Training KL:", self.logger['kl_div']['train'][e])
-                print("Epoch #", e, "Validation Loss:", self.logger['loss']['val'][e], "Validation IoU:",
+                print(f"Epoch {e+1}/{epochs} Validation Loss:", self.logger['loss']['val'][e], "Validation IoU:",
                       self.logger['iou']['val'][e], "Validation KL:", self.logger['kl_div']['val'][e])
 
     def get_best_model(self):
         return self.best_model_params
+
+    def plot(self, epoch_min=0, epoch_max=-1, figsize=(20, 10)):
+        '''
+        Plots the evolution of different metrics
+        '''
+        fig, ax = plt.subplots(1, 3, figsize=figsize)
+        for i, key in enumerate(self.logger):
+            for mode in ["train", "val"]:
+                ax[i].plot(self.logger[key][mode][epoch_min:epoch_max], label=mode)
+            ax[i].set_xlabel("Epochs")
+            ax[i].set_ylabel(key)
+            ax[i].legend()
+        plt.show()
 
     def generate_submission(self, loader, fname='submission'):
         sub_dict = {"sample_id": [], "no_data": [], "clouds": [], "artificial": [], "cultivated": [], "broadleaf": [],
