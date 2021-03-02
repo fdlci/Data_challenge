@@ -88,7 +88,8 @@ class ImageSegementationDataset(Dataset):
         if self.mode in ['train', 'valid']:
             image_path = os.path.join(self.images_dir, 'images', self.path_indices[idx])
             mask_path = os.path.join(self.images_dir, 'masks', self.path_indices[idx])
-            image = cv2.normalize(parse_tiff(image_path)[..., :self.in_channels],dst=None, alpha=0, beta=65535, norm_type=cv2.NORM_MINMAX)
+            image = cv2.normalize(parse_tiff(image_path)[..., :self.in_channels], dst=None, alpha=0, beta=65535,
+                                  norm_type=cv2.NORM_MINMAX)
             mask = parse_tiff(mask_path)
             if self.transforms:
                 transformed = self.transforms(image=image, mask=mask)
@@ -97,7 +98,8 @@ class ImageSegementationDataset(Dataset):
             return image, mask
         else:
             image_path = os.path.join(self.images_dir, 'images', self.path_indices[idx])
-            image = cv2.normalize(parse_tiff(image_path)[..., :self.in_channels],dst=None, alpha=0, beta=65535, norm_type=cv2.NORM_MINMAX)
+            image = cv2.normalize(parse_tiff(image_path)[..., :self.in_channels], dst=None, alpha=0, beta=65535,
+                                  norm_type=cv2.NORM_MINMAX)
             if self.transforms:
                 transformed = self.transforms(image=image)
                 image = transformed['image']

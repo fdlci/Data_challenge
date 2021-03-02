@@ -2,6 +2,7 @@ import torch
 from torch.autograd import Variable
 import torch.nn.functional as F
 from torch import nn
+from segmentation_models_pytorch.losses import DiceLoss
 
 
 def one_hot(y_true, y_pred, numLabels):
@@ -47,31 +48,12 @@ class BCELoss2d(nn.Module):
         return self.bce_loss(logits_flat, labels_flat)
 
 
-class SoftDiceLoss(nn.Module):
-    def __init__(self, num_labels):
-        super(SoftDiceLoss, self).__init__()
-        self.num_labels = num_labels
-
-    def forward(self, logits, labels):
-        probs = F.softmax(logits, dim=1)
-        if labels.size(1) != self.num_labels:
-            labels = one_hot(labels, logits, self.num_labels)
-        num = labels.size(0)
-        score = 0
-        for class_ in range(self.num_labels):
-            m1 = probs[:, class_, ...].view(num, -1)
-            m2 = labels[:, class_, ...].view(num, -1)
-            intersection = (m1 * m2)
-            score += (2. * (intersection.sum(1) + 1e-4) / (m1.sum(1) + m2.sum(1) + 1e-4)) / self.num_labels
-        return 1 - score.mean()
-
-
 class CombinedLoss(nn.Module):
-    def __init__(self, is_log_dice=False, num_labels=10):
+    def __init__(self, is_log_dice=False):
         super(CombinedLoss, self).__init__()
         self.is_log_dice = is_log_dice
         self.bce = BCELoss2d()
-        self.soft_dice = SoftDiceLoss(num_labels)
+        self.soft_dice = DiceLoss("multiclass", smooth=1e-4)
 
     def forward(self, logits, labels):
         bce_loss = self.bce(logits, labels)
