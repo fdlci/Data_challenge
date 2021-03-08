@@ -55,12 +55,14 @@ class Trainer:
             output = self.model(image)
             _, preds = torch.max(output, 1)
 
-            loss, bce_loss, dice_loss = self.criterion(output, mask.squeeze())
-
             if mode == 'train':
+                loss, bce_loss, dice_loss = self.criterion(output, mask.squeeze())
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
+            else:
+                with torch.no_grad():
+                    loss, bce_loss, dice_loss = self.criterion(output, mask.squeeze())
             with torch.no_grad():
                 running_loss += loss.item()
                 running_iou += mIOU(mask, preds)
