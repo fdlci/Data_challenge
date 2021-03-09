@@ -19,32 +19,18 @@ def one_hot(y_true, y_pred, numLabels):
     encoded_target = Variable(encoded_target)
     return encoded_target
 
-# def dice_coef(y_true, y_pred):
-#     y_true_f = y_true.flatten()
-#     y_pred_f = y_pred.flatten()
-#     intersection = (y_pred_f * y_true_f).sum()
-#     smooth = 0.0001
-#     return 1 - (2. * intersection + smooth) / (y_true_f.sum() + y_pred_f.sum() + smooth)
-#
-#
-# def dice_coef_multilabel(y_pred, y_true, numLabels):
-#     dice = 0
-#     y_true = change_shape(y_true, y_pred, numLabels)
-#     for index in range(numLabels):
-#         dice += dice_coef(y_true[:, index, :, :], y_pred[:, index, :, :])
-#     return dice / numLabels  # taking average
 
 class DiceLoss(_Loss):
 
     def __init__(
-        self,
-        mode: str,
-        classes: Optional[List[int]] = None,
-        log_loss: bool = False,
-        from_logits: bool = True,
-        smooth: float = 0.0,
-        ignore_index: Optional[int] = None,
-        eps: float = 1e-7,
+            self,
+            mode: str,
+            classes: Optional[List[int]] = None,
+            log_loss: bool = False,
+            from_logits: bool = True,
+            smooth: float = 0.0,
+            ignore_index: Optional[int] = None,
+            eps: float = 1e-7,
     ):
         """Implementation of Dice loss for image segmentation task.
         It supports binary, multiclass and multilabel cases
@@ -128,6 +114,8 @@ class DiceLoss(_Loss):
 
         return loss.mean()
 
+
+# taken from https://github.com/asanakoy/kaggle_carvana_segmentation/blob/master/asanakoy/losses.py
 class BCELoss2d(nn.Module):
     """
     Binary Cross Entropy loss function
@@ -146,19 +134,73 @@ class BCELoss2d(nn.Module):
         return self.bce_loss(logits_flat, labels_flat)
 
 
+class WeightedBCELoss2d(nn.Module):
+    def __init__(self):
+        super(WeightedBCELoss2d, self).__init__()
+
+    def forward(self, logits, labels, weights):
+        num_labels = logits.shape[1]
+        w = weights.view(-1)
+        if labels.size(1) != num_labels:
+            labels = one_hot(labels, logits, num_labels)
+        logits = logits.view(-1)
+        gt = labels.view(-1)
+        # http://geek.csdn.net/news/detail/126833
+        loss = logits.clamp(min=0) - logits * gt + torch.log(1 + torch.exp(-logits.abs()))
+        loss = loss * w
+        loss = loss.sum() / w.sum()
+        return loss
+
+
+class CrossEntropyLoss(nn.Module):
+    """
+    Binary Cross Entropy loss function
+    """
+
+    def __init__(self):
+        super(CrossEntropyLoss, self).__init__()
+        self.ce_loss = nn.CrossEntropyLoss()
+
+    def forward(self, logits, labels):
+        bs, num_classes = logits.shape[0], logits.shape[1]
+        logits_flat = logits.view(bs, num_classes, -1)
+        labels_flat = labels.view(bs, -1)
+        return self.ce_loss(logits_flat, labels_flat)
+
+
 class CombinedLoss(nn.Module):
-    def __init__(self, is_log_dice=False):
+    def __init__(self, cross_entropy=True, is_log_dice=False):
         super(CombinedLoss, self).__init__()
         self.is_log_dice = is_log_dice
+        self.cross_entropy = cross_entropy
         self.bce = BCELoss2d()
+        self.ce = CrossEntropyLoss()
         self.soft_dice = DiceLoss("multiclass", smooth=1e-4)
 
     def forward(self, logits, labels):
-        bce_loss = self.bce(logits, labels)
+        if self.cross_entropy:
+            loss = self.ce(logits, labels)
+        else:
+            loss = self.bce(logits, labels)
         dice_loss = self.soft_dice(logits, labels)
 
         if self.is_log_dice:
-            l = bce_loss - (1 - dice_loss).log()
+            l = loss - (1 - dice_loss).log()
         else:
-            l = bce_loss + dice_loss
-        return l, bce_loss, dice_loss
+            l = loss + dice_loss
+        return l, loss, dice_loss
+
+# def dice_coef(y_true, y_pred):
+#     y_true_f = y_true.flatten()
+#     y_pred_f = y_pred.flatten()
+#     intersection = (y_pred_f * y_true_f).sum()
+#     smooth = 0.0001
+#     return 1 - (2. * intersection + smooth) / (y_true_f.sum() + y_pred_f.sum() + smooth)
+#
+#
+# def dice_coef_multilabel(y_pred, y_true, numLabels):
+#     dice = 0
+#     y_true = change_shape(y_true, y_pred, numLabels)
+#     for index in range(numLabels):
+#         dice += dice_coef(y_true[:, index, :, :], y_pred[:, index, :, :])
+#     return dice / numLabels  # taking average
