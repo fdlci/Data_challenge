@@ -169,9 +169,10 @@ class CrossEntropyLoss(nn.Module):
 
 
 class CombinedLoss(nn.Module):
-    def __init__(self, cross_entropy=True, is_log_dice=False):
+    def __init__(self, cross_entropy=True, alpha=1, is_log_dice=False):
         super(CombinedLoss, self).__init__()
         self.is_log_dice = is_log_dice
+        self.alpha = alpha
         self.cross_entropy = cross_entropy
         self.bce = BCELoss2d()
         self.ce = CrossEntropyLoss()
@@ -185,10 +186,10 @@ class CombinedLoss(nn.Module):
         dice_loss = self.soft_dice(logits, labels)
 
         if self.is_log_dice:
-            l = loss - (1 - dice_loss).log()
+            total_loss = self.alpha * loss - (1 - dice_loss).log()
         else:
-            l = loss + dice_loss
-        return l, loss, dice_loss
+            total_loss = self.alpha * loss + dice_loss
+        return total_loss, loss, dice_loss
 
 # def dice_coef(y_true, y_pred):
 #     y_true_f = y_true.flatten()
