@@ -157,12 +157,12 @@ class CrossEntropyLoss(nn.Module):
     Binary Cross Entropy loss function
     """
 
-    def __init__(self, weights):
+    def __init__(self, weights, weight_bool=False):
         super(CrossEntropyLoss, self).__init__()
-        if weights is None:
-            self.ce_loss = nn.CrossEntropyLoss()
-        else:
+        if weight_bool:
             self.ce_loss = nn.CrossEntropyLoss(weight=weights)
+        else:
+            self.ce_loss = nn.CrossEntropyLoss()
 
     def forward(self, logits, labels):
         bs, num_classes = logits.shape[0], logits.shape[1]
@@ -172,13 +172,13 @@ class CrossEntropyLoss(nn.Module):
 
 
 class CombinedLoss(nn.Module):
-    def __init__(self, cross_entropy=True, alpha=1, is_log_dice=False, weights=None):
+    def __init__(self, weights=None, weight_bool=False, cross_entropy=True, alpha=1, is_log_dice=False):
         super(CombinedLoss, self).__init__()
         self.is_log_dice = is_log_dice
         self.alpha = alpha
         self.cross_entropy = cross_entropy
         self.bce = BCELoss2d()
-        self.ce = CrossEntropyLoss(weights)
+        self.ce = CrossEntropyLoss(weights, weight_bool)
         self.soft_dice = DiceLoss("multiclass", smooth=1e-4)
 
     def forward(self, logits, labels):
