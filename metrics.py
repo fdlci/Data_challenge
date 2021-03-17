@@ -10,8 +10,8 @@ def epsilon_kl_divergence(y_true, y_pred):
     normalized_class_distribution_true = (class_distribution_true.T / class_distribution_true.sum(1)).T
     normalized_class_distribution_pred = (class_distribution_pred.T / class_distribution_pred.sum(1)).T
     # add a small constant for smoothness around 0
-    normalized_class_distribution_true += 1e-7
-    normalized_class_distribution_pred += 1e-7
+    normalized_class_distribution_true += 1e-8
+    normalized_class_distribution_pred += 1e-8
 
     score = np.mean(np.sum(normalized_class_distribution_true * np.log(
         normalized_class_distribution_true / normalized_class_distribution_pred), 1))
